@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>🔍 Auswertung</h2>
+
+<p>Dein Ergebnis: {{ score }} von {{ max_score }} Punkten</p>
+
+<ul>
+  {% for r in results %}
+    <li>
+      <strong>{{ r.question }}</strong><br>
+      {% if r.is_correct %}
+        ✅ korrekt beantwortet
+      {% else %}
+        ❌ falsch<br>
+        Richtige Antwort(en): 
+        <ul>
+            {% for c in r.correct %}
+              <li>{{ c.text }}</li>
+            {% endfor %}
+        </ul>
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>
+
+<a href="/">🔁 Neues Quiz starten</a>
+{% endblock %}

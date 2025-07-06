@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>📤 Markdown-Quiz hochladen</h2>
+<form action="/upload" method="post" enctype="multipart/form-data">
+  <input type="file" name="file" accept=".md">
+  <button type="submit">Hochladen</button>
+</form>
+{% endblock %}

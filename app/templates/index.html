@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Wähle ein Quiz</h2>
+<ul>
+  {% for quiz in quizzes %}
+    <li>
+      <a href="/quiz/{{ quiz.id }}">{{ quiz.title }}</a>
+    </li>
+  {% endfor %}
+</ul>
+
+<p>
+  <a href="/upload">📤 Neues Quiz hochladen</a>
+</p>
+{% endblock %}

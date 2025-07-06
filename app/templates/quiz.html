@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{{ quiz.title }}</h2>
+<form action="/submit" method="post">
+  {% for q in quiz.questions %}
+    <fieldset>
+      <legend>{{ q.text }}</legend>
+      {% for o in q.options %}
+        <label><input type="checkbox" name="q{{ q.id }}" value="{{ o.id }}"> {{ o.text }}</label><br>
+      {% endfor %}
+    </fieldset>
+  {% endfor %}
+  <button type="submit">Antworten prüfen</button>
+</form>
+{% endblock %}

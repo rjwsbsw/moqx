@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>
+  {% if answer == "success" %}
+    ✅ Upload und Import erfolgreich
+  {% elif answer == "error" %}
+    ❌ Fehler beim Import
+  {% else %}
+    ℹ️ Ergebnis unbekannt
+  {% endif %}
+</h2>
+
+{% if answer == "success" %}
+  <p>Datei <strong>{{ filename }}</strong> wurde erfolgreich verarbeitet.</p>
+  <p>Es wurden {{ imported }} Quizze gespeichert.</p>
+  <a href="/">⬅️ Zur Startseite</a>
+
+{% elif answer == "error" %}
+  <p>Die Datei konnte nicht verarbeitet werden.</p>
+  <pre>{{ error }}</pre>
+  <a href="/upload">⬅️ Zurück zum Upload</a>
+
+{% else %}
+  <p>Es wurde kein Ergebnis übergeben.</p>
+{% endif %}
+{% endblock %}
