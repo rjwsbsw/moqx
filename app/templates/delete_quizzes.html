@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>🗑️ Quiz löschen</h2>
+<form method="post">
+  <ul>
+    {% for quiz in quizzes %}
+      <li>
+        <label>
+          <input type="checkbox" name="quiz_id" value="{{ quiz.id }}">
+          {{ quiz.title }}
+        </label>
+      </li>
+    {% endfor %}
+  </ul>
+  <button type="submit">🚫 Ausgewählte löschen</button>
+</form>
+<p>
+  <a href="/">⬅️ Zurück zur Auswahl</a>
+</p>
+{% endblock %}

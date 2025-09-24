@@ -1,46 +1,139 @@
-import sys
 from pathlib import Path
-from quiz_parser_md import parse_quiz, print_quiz
-from sqlalchemy_model import Quiz, Question, Option
-from db_utils import get_engine, create_db, get_session
 
-def lese_quiz() -> str:
-    if len(sys.argv) < 2:
-        print("❌ Fehler: Bitte gib den Pfad zur Markdown-Datei an.")
-        print("👉 Beispiel: python main.py quiz.md")
-        sys.exit(1)
+from fastapi import FastAPI, Request, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 
-    filepath = Path(sys.argv[1])
-    if not filepath.exists():
-        print(f"❌ Datei nicht gefunden: {filepath}")
-        sys.exit(1)
+from .db_utils import OperationalError
+from .quiz_schema import QuizOut
+from .quiz_parser_md import parse_quiz
+from .sqlalchemy_process import load_all_quizzes, upload_parsed_quizzes, delete_quizzes_by_ids
+from .sqlalchemy_process import load_questions_by_ids, load_quiz_by_id, load_options_by_ids
 
-    return filepath.read_text(encoding="utf-8")
+api = FastAPI()
+BASE_DIR = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-def main():
-    content = lese_quiz()
-    parsed_quizzes = parse_quiz(content)
+@api.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    """
+    Show all available quizzes.
 
-    engine = get_engine()
-    create_db(engine)
-    session = get_session(engine)
+    Returns a HTML page with a list of links to available quizzes.
+    """
+    error_msg = ""
+    try:
+        quizzes = load_all_quizzes()
+    except OperationalError as e:
+        error_msg = str(e)
+        quizzes = []
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "errorMsg": error_msg,
+        "quizzes": quizzes
+    })
 
-    for quiz in parsed_quizzes:
-        db_quiz = Quiz(title=quiz.title)
-        for q in quiz.questions:
-            db_q = Question(text=q.text)
-            for opt in q.options:
-                db_q.options.append(Option(text=opt.text, correct=opt.correct))
-            db_quiz.questions.append(db_q)
-        session.add(db_quiz)
 
-    session.commit()
-    print("✅ Quiz wurde erfolgreich gespeichert.")
+@api.get("/quiz/{quiz_id}", response_class=HTMLResponse)
+def show_quiz(request: Request, quiz_id: int):
+    quiz = load_quiz_by_id(quiz_id)
+    schema = QuizOut.model_validate(quiz)
+    return templates.TemplateResponse("quiz.html", {
+        "request": request,
+        "quiz": schema
+    })
 
-    # 🔍 Jetzt: Daten direkt aus der DB lesen und anzeigen
-    print("\n📤 Gespeicherte Inhalte aus der Datenbank:")
-    for quiz in session.query(Quiz).all():
-        print_quiz(quiz)
+@api.post("/submit", response_class=HTMLResponse)
+async def submit(request: Request):
+    form = await request.form()
+    selected_ids = [int(value) for _,value in form.multi_items()] # alle ausgewählten Option-IDs
+    options = load_options_by_ids(selected_ids)
+    # print("DEBUG Option: %s" % (options,))
+    # for opt in options:
+    #     print("DEBUG Option:", opt.id, opt.text, opt.correct, opt.question_id)
 
-if __name__ == "__main__":
-    main()
+
+    # Optionen nach Frage gruppieren
+    result_by_question = {}
+    for opt in options:
+        if opt.question_id not in result_by_question:
+            result_by_question[opt.question_id] = []
+        result_by_question[opt.question_id].append(opt)
+    print(result_by_question)
+
+    score = 0
+    results = []
+    questions = load_questions_by_ids(list(result_by_question.keys()))
+
+    for q in questions:
+        selected_os = result_by_question.get(q.id, [])
+        correct_os = [o for o in q.options if o.correct]
+        is_correct = set(o.id for o in selected_os) == set(o.id for o in correct_os)
+
+        results.append({
+            "question": q.text,
+            "selected": selected_os,
+            "correct": correct_os,
+            "is_correct": is_correct
+        })
+
+        if is_correct:
+            score += 1
+
+    return templates.TemplateResponse("result.html", {
+        "request": request,
+        "score": score,
+        "max_score": len(questions),
+        "results": results
+    })
+
+@api.get("/upload", response_class=HTMLResponse)
+def upload_form(request: Request):
+    return templates.TemplateResponse("upload.html", {"request": request})
+
+@api.post("/upload", response_class=HTMLResponse)
+async def upload_file(request: Request, file: UploadFile = File(...)):
+    content = await file.read()
+    text = content.decode("utf-8")
+    error_msg, count = "", 0
+    
+    try:
+        #print("Parsing: %s" % text)
+        parsed_quizzes = parse_quiz(text)
+        print("Parsed Quizzes: %s", parsed_quizzes)
+    except Exception as e:
+        error_msg =f"""
+            Unerwarteter Fehler beim Parsen:\n
+            Error: {str(e)}"""
+    if not error_msg:
+        try:
+            count = upload_parsed_quizzes(parsed_quizzes)
+        except Exception as e:
+            error_msg =f"""
+                Unerwarteter Fehler beim Speichern:\n
+                Error: {str(e)}"""
+
+    return templates.TemplateResponse("upload_reply.html", {
+        "request": request,
+        "answer": "success" if error_msg == "" else "error",
+        "filename": file.filename,
+        "imported": count,
+        "error": error_msg,
+        "errorMsg": error_msg
+    })
+
+
+@api.get("/delete")
+def show_delete_page(request: Request):
+    quizzes = load_all_quizzes()
+    return templates.TemplateResponse("delete_quizzes.html", {
+        "request": request,
+        "quizzes": quizzes
+    })
+
+@api.post("/delete")
+async def delete_selected_quizzes(request: Request):
+    form = await request.form()
+    ids = [int(value) for key, value in form.multi_items() if key == "quiz_id"]
+    delete_quizzes_by_ids(ids)
+    return RedirectResponse(url="/", status_code=303)

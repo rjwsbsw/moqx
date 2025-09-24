@@ -1,11 +1,28 @@
-from sqlalchemy_model import Quiz, Question, Option
-from db_utils import get_engine, get_session, create_db
+import time
+import logging
 
-# Initialisiere Engine und Session
-def init_db():
+from .sqlalchemy_model import Quiz, Question, Option
+from .db_utils import get_engine, get_session, create_db, OperationalError
+
+
+# DB initialisieren
+def _init_db_():
     engine = get_engine()
     create_db(engine)
     return get_session(engine)
+
+# neue init_db mit Retry und Logging
+def init_db(retries=5, delay=3):
+    last_exception = None
+    for attempt in range(1, retries + 1):
+        try:
+            return _init_db_()
+        except OperationalError as e:
+            logging.error(f"🔁 DB-Verbindung fehlgeschlagen (Versuch {attempt}/{retries}): {e}")
+            last_exception = e
+            time.sleep(delay)
+    logging.error("❌ Alle Verbindungsversuche fehlgeschlagen.")
+    raise last_exception
 
 # 📥 importiere geparste Quizzes in die DB
 def upload_parsed_quizzes(parsed_quizzes):
@@ -43,3 +60,11 @@ def load_options_by_ids(option_ids: list[int]):
 def load_questions_by_ids(question_ids: list[int]):
     session = init_db()
     return session.query(Question).filter(Question.id.in_(question_ids)).all()
+
+def delete_quizzes_by_ids(quiz_ids: list[int]):
+    session = init_db()
+    for qid in quiz_ids:
+        quiz = session.get(Quiz, qid)
+        if quiz:
+            session.delete(quiz)
+    session.commit()
