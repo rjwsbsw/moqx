@@ -9,6 +9,7 @@ python-multipart
 pydantic
 jinja2
 uvicorn
+python-dotenv
 
 # Test-Framework
 pytest
